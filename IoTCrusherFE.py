@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import copy
 import subprocess
@@ -11,6 +10,7 @@ import ast
 from datetime import datetime
 from time import sleep
 from tkinter import *
+from tkinter import Image as TkImage
 from tkinter import messagebox
 import tkinter.ttk as ttk
 from tkinter import filedialog
@@ -22,6 +22,23 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib import colors
+
+from PIL import ImageTk
+from PIL import Image as PImage
+
+
+# Global variables for using in two classes
+args = dict()
+required = list()
+SHOW_SPLASH = 7
+
+
+class StatusBar(ttk.Frame):
+    def __init__(self, master, msgtxt):
+        ttk.Frame.__init__(self, master)
+        self.pack(side=BOTTOM, fill=X)
+        self.label = Label(self, bd=1, text=msgtxt, relief=SUNKEN, anchor=W)
+        self.label.pack(fill=X)
 
 
 class HyperlinkedImage(Image, object):
@@ -74,7 +91,7 @@ def header(canv, doc):
         iot_logo = media_dir + "/logo_b.jpg"
         if os.path.exists(opcode_logo):
             # Make clickable logo
-            opcode_image = HyperlinkedImage(opcode_logo, "https://opcode41.com/", width=300, height=56)
+            opcode_image = HyperlinkedImage(opcode_logo, "http://opcode41.com/", width=300, height=56)
             opcode_image.drawOn(canv, doc.leftMargin - 50 + shift_left, doc.height + 60)
             # canv.drawInlineImage(opcode_logo, doc.leftMargin - 50 + shift_left, doc.height + 60, width=300, height=56)
         if os.path.exists(iot_logo):
@@ -281,6 +298,130 @@ def process_argstr_list(arg_strings_list):
     return processed_args
 
 
+class SplashScreen(ttk.Frame):
+    def __init__(self, master=None, exe_path=None, width=0.55, height=0.25, use_factor=True):
+        self.exe_path = exe_path
+        global args, required
+
+        splash_mode = False
+
+        # Show splash-screen if /media folder and logos are exist
+        cur_path = os.path.dirname(os.path.realpath(__file__))
+        media_dir = cur_path + "/media"
+        if os.path.isdir(media_dir):
+            iot_logo = media_dir + "/logo_b.jpg"
+            opcode_logo = media_dir + "/logo.jpg"
+            if os.path.exists(iot_logo) and os.path.exists(opcode_logo):
+                splash_mode = True
+                ttk.Frame.__init__(self, master)
+                self.pack(side=TOP, fill=BOTH, expand=YES)
+
+                # get screen width and height
+                ws = self.master.winfo_screenwidth()
+                hs = self.master.winfo_screenheight()
+                w = (use_factor and ws * width) or width
+                h = (use_factor and ws * height) or height
+                # calculate position x, y
+
+                x = (ws / 2) - (w / 2)
+                y = (hs / 2) - (h / 2)
+                self.master.geometry('%dx%d+%d+%d' % (w, h, x, y))
+                self.master.config(bg="#ffffff")
+                self.master.overrideredirect(True)
+                self.lift()
+
+                message = "Please wait while interface is loading..."
+
+                cur_path = os.path.dirname(os.path.realpath(__file__))
+                media_dir = cur_path + "/media"
+                iot_logo = media_dir + "/logo_b.jpg"
+                opcode_logo = media_dir + "/logo.jpg"
+
+                # image_logo = ImageTk.PhotoImage(Image.open(iot_logo).resize(120, 120))
+
+                original = PImage.open(iot_logo)
+                resized = original.resize((int(0.365*w), int(0.365*w)), PImage.ANTIALIAS)
+                self.iot_image = ImageTk.PhotoImage(resized)
+
+                original = PImage.open(opcode_logo)
+                op_w = int(0.6*w)
+                op_h = int(0.188*op_w)
+                resized = original.resize((op_w, op_h), PImage.ANTIALIAS)
+                self.opcode_image = ImageTk.PhotoImage(resized)
+
+                self.iot_logo = Label(self, bg="#ffffff", image=self.iot_image, borderwidth=0, highlightthickness=0)
+                self.iot_logo.image = self.iot_image
+                self.iot_logo.config(bg="#ffffff", fg="#ffffff")
+                self.iot_logo.place(rely=0, relheight=0.85, relwidth=0.32)
+
+                self.opcode_logo = Label(self, bg="#ffffff", image=self.opcode_image, borderwidth=0, highlightthickness=0)
+                self.opcode_logo.image = self.opcode_image
+                self.opcode_logo.config(bg="#ffffff", fg="#ffffff")
+                self.opcode_logo.place(rely=0, relx=0.4, relheight=0.85, relwidth=0.6)
+
+                self.by_label = Label(self, bg="#ffffff", borderwidth=0, highlightthickness=0, text="by")
+                self.by_label.config(bg="#ffffff", fg="#aaaaaa", font='Helvetica 24 bold')
+                self.by_label.place(rely=0, relx=0.32, relheight=0.85, relwidth=0.1)
+
+                self.splash_message = Label(self, text=message)
+                self.splash_message.place(rely=0.85, relheight=0.15, relwidth=1)
+                self.splash_message.config(bg="#aaaaaa", fg="#ffffff")
+
+                self.update()
+
+        self.args = None
+        self.required = None
+
+        while True:
+            try:
+                load_start = datetime.now()
+                self.get_args_from_help()
+                break
+            except TypeError:
+                ui_conf_path = './ui_config.json'
+                ui_config_exists = False
+
+                if os.path.isfile(ui_conf_path):
+                    ui_config_exists = True
+
+                new_path = filedialog.askopenfilename(
+                    initialdir="./",
+                    title="Please specify the path to IoTCrusher executable...",
+                )
+                if new_path:
+                    self.exe_path = new_path
+                    if ui_config_exists:
+                        with open(ui_conf_path, "r") as ui_conf_file:
+                            ui_config = json.load(ui_conf_file)
+                            ui_config['exe_path'] = new_path
+                    else:
+                        ui_config = {'exe_path': new_path}
+
+                    with open(ui_conf_path, "w") as f:
+                        json.dump(ui_config, f, indent=4)
+                else:
+                    print("No location to IoTCrusher was specified")
+                    sys.exit(1)
+
+        if splash_mode:
+            while (datetime.now() - load_start).total_seconds() < SHOW_SPLASH:
+                sleep(0.1)
+
+        args = self.args
+        required = self.required
+
+        try:
+            self.master.destroy()
+            sleep(0.6)  # To avoid effect that Splash was just overlayed by UI
+        except AttributeError:
+            pass
+
+    def get_args_from_help(self):
+        """Obtain structured dictionary with arguments from --help output"""
+        self.required, arg_str_list = get_iotc_args(self.exe_path)
+        self.args = process_argstr_list(arg_str_list)
+
+
 # The following code is added to facilitate the Scrolled widgets.
 class AutoScroll(object):
     """Configure the scrollbars for a widget."""
@@ -382,37 +523,13 @@ class IoTUI(ttk.Frame):
         self.required = None
         self.exe_path = None
         self.get_exe_path()
-        while True:
-            try:
-                self.get_args_from_help()
-                break
-            except TypeError:
-                ui_conf_path = './ui_config.json'
-                ui_config_exists = False
 
-                if os.path.isfile(ui_conf_path):
-                    ui_config_exists = True
+        sp_root = Toplevel()
+        SplashScreen(sp_root, self.exe_path)
 
-                new_path = filedialog.askopenfilename(
-                    initialdir="./",
-                    title="Please specify the path to IoTCrusher executable...",
-                )
-                if new_path:
-                    self.exe_path = new_path
-                    if ui_config_exists:
-                        with open(ui_conf_path, "r") as ui_conf_file:
-                            ui_config = json.load(ui_conf_file)
-                            ui_config['exe_path'] = new_path
-                    else:
-                        ui_config = {'exe_path': new_path}
-
-                    with open(ui_conf_path, "w") as f:
-                        json.dump(ui_config, f, indent=4)
-                else:
-                    print("No location to IoTCrusher was specified")
-                    sys.exit(1)
-
-        # TODO: probably should add kinda splashscreen for few seconds?
+        global args, required
+        self.args = args
+        self.required = required
 
         # Constructing GUI
         top.geometry("999x709+100+30")
@@ -450,7 +567,7 @@ class IoTUI(ttk.Frame):
 
         self.vuln_columns = ('root', 'ipaddress', 'port', 'username', 'pwd', 'shellprompt')
         self.vuln_tree = ScrolledTreeView(top, columns=self.vuln_columns, show="headings")
-        self.vuln_tree.place(relx=0.01, rely=0.65, relheight=0.26, relwidth=0.7)
+        self.vuln_tree.place(relx=0.01, rely=0.65, relheight=0.24, relwidth=0.7)
 
         for c in self.vuln_columns:
             self.vuln_tree.heading(c, text=c)
@@ -469,32 +586,48 @@ class IoTUI(ttk.Frame):
         self.setting_options_labeled_frame.configure(width=370)
 
         self.hint_labeled_frame = LabelFrame(top)
-        self.hint_labeled_frame.place(relx=0.72, rely=0.64, relheight=0.27, relwidth=0.27)
+        self.hint_labeled_frame.place(relx=0.72, rely=0.64, relheight=0.25, relwidth=0.27)
         self.hint_labeled_frame.configure(text='Hint')
 
         self.run_button = Button(top, command=self.run_iotcrusher, state='disabled')
-        self.run_button.place(relx=0.02, rely=0.93, height=41, width=125)
+        self.run_button.place(relx=0.02, rely=0.9, height=41, width=125)
         self.run_button.configure(text='Run')
 
         self.save_button = Button(top, command=self.save_settings)
-        self.save_button.place(relx=0.16, rely=0.93, height=41, width=125)
+        self.save_button.place(relx=0.16, rely=0.9, height=41, width=125)
         self.save_button.configure(text='Save settings')
 
         self.load_button = Button(top, command=self.load_settings)
-        self.load_button.place(relx=0.3, rely=0.93, height=41, width=125)
+        self.load_button.place(relx=0.3, rely=0.9, height=41, width=125)
         self.load_button.configure(text='Load settings')
 
         self.export_button = Button(top, command=self.export_results, state='disabled')
-        self.export_button.place(relx=0.44, rely=0.93, height=41, width=125)
+        self.export_button.place(relx=0.44, rely=0.9, height=41, width=125)
         self.export_button.configure(text='Export...')
 
         self.cmd_str_button = Button(top, command=self.cmd_popup)
-        self.cmd_str_button.place(relx=0.58, rely=0.93, height=41, width=125)
+        self.cmd_str_button.place(relx=0.58, rely=0.9, height=41, width=125)
         self.cmd_str_button.configure(text='Get command')
+
+        # Field for setting pexpect timeout
+        self.run_timeout_l = Label(top, anchor="e")
+        self.run_timeout_l.place(relx=0.72, rely=0.9, height=40, width=150)
+        self.run_timeout_l.configure(text='run timeout, sec:\n(-1 for infinite wait)')
+        self.run_timeout_d = Text(top, wrap=WORD)
+        self.run_timeout_d.place(relx=0.88, rely=0.9, height=20, width=48)
+        self.run_timeout_d.insert('end', 3600)
+        # self.run_timeout_d.bind('<1>', lambda e: self.run_timeout_d.focus_set())
 
         self.fill_settings()
         self.check_req_filled()
         self.user_settings = {}
+
+        self.status = StatusBar(self, "Ready")
+
+    def update_status(self, message):
+        """Function to update message in statusbar"""
+        self.status.label.config(text=message)
+        self.status.label.update_idletasks()
 
     def get_exe_path(self):
         """Define path for IoTCrusher executable"""
@@ -535,11 +668,6 @@ class IoTUI(ttk.Frame):
             else:
                 print("Wrong location to IoTCrusher was specified")
                 sys.exit(1)
-
-    def get_args_from_help(self):
-        """Obtain structured dictionary with arguments from --help output"""
-        self.required, arg_str_list = get_iotc_args(self.exe_path)
-        self.args = process_argstr_list(arg_str_list)
 
     def fill_settings(self):
         """Fill listbox with IoTCrusher arguments: required in the beginning and alphabetically sorted others"""
@@ -786,72 +914,86 @@ class IoTUI(ttk.Frame):
 
         cmd = cmd.split()
         arguments = cmd[1:]
-        child = pexpect.spawn(self.exe_path, args=arguments, cwd=os.path.dirname(self.exe_path), timeout=3000)
-        child.setwinsize(1000, 50)
-        proceed = False
-        proceed_type = None
-        vuln_msg = None
-        status_msg = None
-        decor_re = re.compile("\\x1b\[[0-9]+m")
-        xml_re = re.compile("<[a-z/_]+>")
+        try:
+            timeout = int(self.run_timeout_d.get("1.0", END))
+            if timeout == -1:
+                timeout = None
+        except ValueError:
+            self.update_status("Incorrect timeout value!")
+            return
 
-        for line in child:
-            processed_line = re.sub(decor_re, "", line.decode('utf-8'))
-            tags = xml_re.findall(processed_line)
+        self.update_status("IoTCrusher is running...")
 
-            if proceed:
-                if proceed_type == 'msg':
-                    # Ending of message block
-                    if '</msg>' in tags:
-                        status_msg += processed_line.split("</msg>")[0]
-                        self.process_status_msg(status_msg)
-                        proceed = False
-                        proceed_type = None
+        try:
+            child = pexpect.spawn(self.exe_path, args=arguments, cwd=os.path.dirname(self.exe_path), timeout=timeout)
+            child.setwinsize(1000, 50)
+            proceed = False
+            proceed_type = None
+            vuln_msg = None
+            status_msg = None
+            decor_re = re.compile("\\x1b\[[0-9]+m")
+            xml_re = re.compile("<[a-z/_]+>")
 
-                    # Message block continues
-                    else:
-                        status_msg += processed_line
+            for line in child:
+                processed_line = re.sub(decor_re, "", line.decode('utf-8'))
+                tags = xml_re.findall(processed_line)
 
-                elif proceed_type == 'vuln':
-                    # Ending of vulnerability block
-                    if "</vuln>" in tags:
-                        vuln_msg += processed_line.split("</vuln>")[0]
-                        self.process_vuln_msg(vuln_msg)
-                        proceed = False
-                        proceed_type = None
+                if proceed:
+                    if proceed_type == 'msg':
+                        # Ending of message block
+                        if '</msg>' in tags:
+                            status_msg += processed_line.split("</msg>")[0]
+                            self.process_status_msg(status_msg)
+                            proceed = False
+                            proceed_type = None
 
-                    # Vulnerability block continues
-                    else:
-                        vuln_msg += processed_line
+                        # Message block continues
+                        else:
+                            status_msg += processed_line
 
-            else:
-                # Beginning of vulnerability block
-                if "<vuln>" in tags:
-                    # print("VULN")
-                    vuln_msg = processed_line.split("<vuln>")[1]
-                    # case of one-line vuln xml description
-                    if "</vuln>" in tags:
-                        vuln_msg = vuln_msg.split("</vuln>")[0]
-                        self.process_vuln_msg(vuln_msg)
-                    else:
-                        proceed = True
-                        proceed_type = "vuln"
+                    elif proceed_type == 'vuln':
+                        # Ending of vulnerability block
+                        if "</vuln>" in tags:
+                            vuln_msg += processed_line.split("</vuln>")[0]
+                            self.process_vuln_msg(vuln_msg)
+                            proceed = False
+                            proceed_type = None
 
-                # Simply remove other tags
-                elif "<msg>" in tags:
-                    status_msg = processed_line.split("<msg>")[1]
-                    # case of one-line status message:
-                    if "</msg>" in tags:
-                        status_msg = status_msg.split("</msg>")[0]
-                        self.process_status_msg(status_msg)
-                    else:
-                        proceed = True
-                        proceed_type = "msg"
+                        # Vulnerability block continues
+                        else:
+                            vuln_msg += processed_line
 
                 else:
-                    if '<xml>' in tags or '</xml>' in tags:
-                        continue
-        # TODO: send message to status bar
+                    # Beginning of vulnerability block
+                    if "<vuln>" in tags:
+                        # print("VULN")
+                        vuln_msg = processed_line.split("<vuln>")[1]
+                        # case of one-line vuln xml description
+                        if "</vuln>" in tags:
+                            vuln_msg = vuln_msg.split("</vuln>")[0]
+                            self.process_vuln_msg(vuln_msg)
+                        else:
+                            proceed = True
+                            proceed_type = "vuln"
+
+                    # Simply remove other tags
+                    elif "<msg>" in tags:
+                        status_msg = processed_line.split("<msg>")[1]
+                        # case of one-line status message:
+                        if "</msg>" in tags:
+                            status_msg = status_msg.split("</msg>")[0]
+                            self.process_status_msg(status_msg)
+                        else:
+                            proceed = True
+                            proceed_type = "msg"
+
+                    else:
+                        if '<xml>' in tags or '</xml>' in tags:
+                            continue
+        except pexpect.exceptions.TIMEOUT:
+            self.update_status("Running wasn't finished. Try to increase timeout value.")
+            return
+        self.update_status("Ready")
         child.close()
 
     def process_status_msg(self, line):
@@ -1051,6 +1193,17 @@ class IoTUI(ttk.Frame):
 
 
 if __name__ == '__main__':
-    root = Tk()
+    root = Tk(className='iotcrusher')
+
+    # Drawing icon for App
+    cur_path = os.path.dirname(os.path.realpath(__file__))
+    media_dir = cur_path + "/media"
+    if os.path.isdir(media_dir):
+        iot_ico = media_dir + "/fav.png"
+        if os.path.exists(iot_ico):
+            # root.iconbitmap(iot_ico)
+            ico = TkImage("photo", file=iot_ico)
+
+            root.tk.call('wm', 'iconphoto', root._w, ico)
     main_window = IoTUI(root)
     root.mainloop()
